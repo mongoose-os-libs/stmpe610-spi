@@ -15,7 +15,7 @@ static uint8_t readRegister8(uint8_t reg) {
   uint8_t rx_data;
 
   struct mgos_spi_txn txn = {
-      .cs = 0,
+      .cs = mgos_sys_config_get_stmpe610_cs_index(),
       .mode = 0,
       .freq = 10000000,
   };
@@ -41,7 +41,7 @@ static void writeRegister8(uint8_t reg, uint8_t val) {
   uint8_t tx_data[2] = {reg, val};
 
   struct mgos_spi_txn txn = {
-      .cs = 0,
+      .cs = mgos_sys_config_get_stmpe610_cs_index(),
       .mode = 0,
       .freq = 10000000,
   };
@@ -150,11 +150,12 @@ bool mgos_STMPE610_init(void) {
   uint16_t v;
 
   v = mgos_STMPE610_getVersion();
+  LOG(LL_INFO, ("STMPE610 init (CS%d, IRQ: %d)", mgos_sys_config_get_stmpe610_cs_index(), mgos_sys_config_get_stmpe610_irq_pin()));
   if (0x811 != v) {
     LOG(LL_ERROR, ("STMPE610 init failed, disabling"));
     return true;
   }
-  LOG(LL_INFO, ("STMPE610 init ok (IRQ: %d)", mgos_sys_config_get_stmpe610_irq_pin()));
+  LOG(LL_INFO, ("STMPE610 init ok"));
 
   writeRegister8(STMPE_SYS_CTRL1, STMPE_SYS_CTRL1_RESET);
   mgos_msleep(10);
