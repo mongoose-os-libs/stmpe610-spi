@@ -1,0 +1,18 @@
+author: Pim van Pelt <pim@ipng.nl>
+type: lib
+description: STMPE610 SPI based touch screen
+version: 1.0
+platforms: [ esp8266 ]
+
+sources:
+  - src
+includes:
+  - include
+libs:
+  - origin: https://github.com/mongoose-os-libs/spi
+
+tags:
+  - c
+  - hw
+
+manifest_version: 2017-09-29
