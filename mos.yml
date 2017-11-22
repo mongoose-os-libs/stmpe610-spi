@@ -11,6 +11,11 @@ includes:
 libs:
   - origin: https://github.com/mongoose-os-libs/spi
 
+config_schema:
+  - ["stmpe610", "o", {title: "STMPE610 TouchScreen"}]
+  - ["stmpe610.irq_pin", "i", 4, {title: "IRQ pin"}]
+
+
 tags:
   - c
   - hw

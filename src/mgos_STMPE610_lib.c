@@ -150,11 +150,11 @@ bool mgos_STMPE610_init(void) {
   uint16_t v;
 
   v = mgos_STMPE610_getVersion();
-  LOG(LL_INFO, ("STMPE610 Version: %04x", v));
   if (0x811 != v) {
-    LOG(LL_ERROR, ("Cannot find STMPE610, disabling"));
+    LOG(LL_ERROR, ("STMPE610 init failed, disabling"));
     return true;
   }
+  LOG(LL_INFO, ("STMPE610 init ok (IRQ: %d)", mgos_sys_config_get_stmpe610_irq_pin()));
 
   writeRegister8(STMPE_SYS_CTRL1, STMPE_SYS_CTRL1_RESET);
   mgos_msleep(10);
@@ -176,7 +176,10 @@ bool mgos_STMPE610_init(void) {
   writeRegister8(STMPE_INT_STA, 0xFF); // reset all ints
   writeRegister8(STMPE_INT_CTRL, STMPE_INT_CTRL_POL_LOW | STMPE_INT_CTRL_EDGE | STMPE_INT_CTRL_ENABLE);
 
-  mgos_gpio_set_button_handler(4, MGOS_GPIO_PULL_UP, MGOS_GPIO_INT_EDGE_NEG, 10, STMPE610_irq, NULL);
+  mgos_gpio_set_mode(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_MODE_INPUT);
+  mgos_gpio_set_pull(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_PULL_UP);
+  mgos_gpio_set_int_handler(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_INT_EDGE_NEG, STMPE610_irq, NULL);
+  mgos_gpio_enable_int(mgos_sys_config_get_stmpe610_irq_pin());
 
   return true;
 }
