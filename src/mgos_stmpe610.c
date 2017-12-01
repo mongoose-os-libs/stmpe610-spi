@@ -3,6 +3,8 @@
 #include "mgos_stmpe610.h"
 
 static mgos_stmpe610_event_t s_event_handler = NULL;
+static enum mgos_stmpe610_rotation_t s_rotation = STMPE610_PORTRAIT;
+struct mgos_stmpe610_event_data s_last_touch;
 
 static uint8_t stmpe610_spi_read_register(uint8_t reg) {
   struct mgos_spi *spi = mgos_spi_get_global();
@@ -111,8 +113,58 @@ static uint16_t smpe610_get_version() {
   return version;
 }
 
+static long map(long x, long in_min, long in_max, long out_min, long out_max)
+{
+  if (x<in_min) x=in_min;
+  if (x>in_max) x=in_max;
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+static void stmpe610_map_rotation(uint16_t x, uint16_t y, uint16_t *x_out, uint16_t *y_out) {
+  switch(s_rotation) {
+    case STMPE610_LANDSCAPE:
+      *x_out = map(y, 150, 3800, 0, 4095);
+      *y_out = map(x, 250, 3700, 0, 4095);
+      break;
+    case STMPE610_PORTRAIT_FLIP:
+      *x_out = map(x, 250, 3800, 0, 4095);
+      *y_out = 4095-map(y, 150, 3700, 0, 4095);
+      break;
+    case STMPE610_LANDSCAPE_FLIP:
+      *x_out = 4095-map(y, 150, 3800, 0, 4095);
+      *y_out = 4095-map(x, 250, 3700, 0, 4095);
+      break;
+    default: // STMPE610_PORTRAIT
+      *x_out = 4095-map(x, 250, 3800, 0, 4095);
+      *y_out = map(y, 150, 3700, 0, 4095);
+  }
+}
+
+/* Each time a TOUCH_DOWN event occurs, s_last_touch is populated
+   and a timer is started. When the timer fires, we checke to see
+   if we've sent a TOUCH_UP event already. If not, we may still be
+   pressing the screen. IF we're not pressing the screen STMP610
+   bufferLength() will be 0. We've now detected a DOWN without a
+   corresponding UP, so we send it ourselves.
+*/
+static void stmpe610_down_cb(void *arg) {
+  if (s_last_touch.direction == TOUCH_UP)
+    return;
+  if (stmpe610_get_bufferlength() > 0)
+    return;
+
+  s_last_touch.direction=TOUCH_UP;
+  if (s_event_handler) {
+    LOG(LL_INFO, ("Touch DOWN not followed by UP -- sending phantom UP"));
+    if (s_event_handler)
+      s_event_handler(&s_last_touch);
+  }
+}
+
 static void stmpe610_irq(int pin, void *arg) {
   struct mgos_stmpe610_event_data ed;
+  uint16_t x, y;
+  uint8_t z;
 
   if (stmpe610_get_bufferlength()==0) {
     uint8_t i;
@@ -120,10 +172,17 @@ static void stmpe610_irq(int pin, void *arg) {
     for (i=0; i<10; i++) {
       mgos_msleep(5);
       if (stmpe610_get_bufferlength()>0) {
-        stmpe610_read_data(&ed.x, &ed.y, &ed.z);
+
+        stmpe610_read_data(&x, &y, &z);
+        LOG(LL_DEBUG, ("Touch DOWN at (%d,%d) pressure=%d, length=%d, iteration=%d", x, y, z, ed.length, i));
+
         ed.length=1;
         ed.direction = TOUCH_DOWN;
-        LOG(LL_DEBUG, ("Touch DOWN at (%d,%d) pressure=%d, length=%d, iteration=%d", ed.x, ed.y, ed.z, ed.length, i));
+        stmpe610_map_rotation(x, y, &ed.x, &ed.y);
+        ed.z = z;
+        // To avoid DOWN events without an UP event, set a timer (see stmpe610_down_cb for details)
+        memcpy((void *)&s_last_touch, (void *)&ed, sizeof(s_last_touch));
+        mgos_set_timer(100, 0, stmpe610_down_cb, NULL);
         if (s_event_handler)
           s_event_handler(&ed);
         break;
@@ -133,9 +192,12 @@ static void stmpe610_irq(int pin, void *arg) {
     return;
   }
 
-  ed.length = stmpe610_read_data(&ed.x, &ed.y, &ed.z);
+  ed.length = stmpe610_read_data(&x, &y, &z);
+  LOG(LL_DEBUG, ("Touch UP at (%d,%d) pressure=%d, length=%d", x, y, z, ed.length));
   ed.direction = TOUCH_UP;
-  LOG(LL_DEBUG, ("Touch UP at (%d,%d) pressure=%d, length=%d", ed.x, ed.y, ed.z, ed.length));
+  stmpe610_map_rotation(x, y, &ed.x, &ed.y);
+  ed.z = z;
+  memcpy((void *)&s_last_touch, (void *)&ed, sizeof(s_last_touch));
   if (s_event_handler)
     s_event_handler(&ed);
 
@@ -144,8 +206,17 @@ static void stmpe610_irq(int pin, void *arg) {
   (void) arg;
 }
 
+
 void mgos_stmpe610_set_handler(mgos_stmpe610_event_t handler) {
   s_event_handler = handler;
+}
+
+void mgos_stmpe610_set_rotation(enum mgos_stmpe610_rotation_t rotation) {
+  s_rotation = rotation;
+}
+
+bool mgos_stmpe610_is_touching() {
+  return s_last_touch.direction == TOUCH_DOWN;
 }
 
 bool mgos_stmpe610_spi_init(void) {
@@ -183,6 +254,13 @@ bool mgos_stmpe610_spi_init(void) {
   mgos_gpio_set_pull(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_PULL_UP);
   mgos_gpio_set_int_handler(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_INT_EDGE_NEG, stmpe610_irq, NULL);
   mgos_gpio_enable_int(mgos_sys_config_get_stmpe610_irq_pin());
+
+  // Initialize the last touch to TOUCH_UP
+  s_last_touch.direction=TOUCH_UP;
+  s_last_touch.x=0;
+  s_last_touch.y=0;
+  s_last_touch.z=0;
+  s_last_touch.length=0;
 
   return true;
 }
