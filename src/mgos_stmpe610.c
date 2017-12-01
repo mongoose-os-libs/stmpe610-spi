@@ -161,6 +161,7 @@ static void stmpe610_down_cb(void *arg) {
     if (s_event_handler)
       s_event_handler(&s_last_touch);
   }
+  (void) arg;
 }
 
 static void stmpe610_irq(int pin, void *arg) {
