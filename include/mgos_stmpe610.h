@@ -130,7 +130,9 @@ bool mgos_stmpe610_init(void);
 typedef void (*mgos_stmpe610_event_t)(struct mgos_stmpe610_event_data *);
 void mgos_stmpe610_set_handler(mgos_stmpe610_event_t handler);
 void mgos_stmpe610_set_rotation(enum mgos_stmpe610_rotation_t rotation);
+void mgos_stmpe610_set_dimensions(uint16_t x, uint16_t y);
 bool mgos_stmpe610_is_touching();
+
 
 
 

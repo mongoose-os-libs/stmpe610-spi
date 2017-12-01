@@ -5,6 +5,8 @@
 static mgos_stmpe610_event_t s_event_handler = NULL;
 static enum mgos_stmpe610_rotation_t s_rotation = STMPE610_PORTRAIT;
 struct mgos_stmpe610_event_data s_last_touch;
+static uint16_t s_max_x = 240;
+static uint16_t s_max_y = 320;
 
 static uint8_t stmpe610_spi_read_register(uint8_t reg) {
   struct mgos_spi *spi = mgos_spi_get_global();
@@ -123,20 +125,20 @@ static long map(long x, long in_min, long in_max, long out_min, long out_max)
 static void stmpe610_map_rotation(uint16_t x, uint16_t y, uint16_t *x_out, uint16_t *y_out) {
   switch(s_rotation) {
     case STMPE610_LANDSCAPE:
-      *x_out = map(y, 150, 3800, 0, 4095);
-      *y_out = map(x, 250, 3700, 0, 4095);
+      *x_out = map(y, 150, 3800, 0, s_max_x);
+      *y_out = map(x, 250, 3700, 0, s_max_y);
       break;
     case STMPE610_PORTRAIT_FLIP:
-      *x_out = map(x, 250, 3800, 0, 4095);
-      *y_out = 4095-map(y, 150, 3700, 0, 4095);
+      *x_out = map(x, 250, 3800, 0, s_max_x);
+      *y_out = 4095-map(y, 150, 3700, 0, s_max_y);
       break;
     case STMPE610_LANDSCAPE_FLIP:
-      *x_out = 4095-map(y, 150, 3800, 0, 4095);
-      *y_out = 4095-map(x, 250, 3700, 0, 4095);
+      *x_out = 4095-map(y, 150, 3800, 0, s_max_x);
+      *y_out = 4095-map(x, 250, 3700, 0, s_max_y);
       break;
     default: // STMPE610_PORTRAIT
-      *x_out = 4095-map(x, 250, 3800, 0, 4095);
-      *y_out = map(y, 150, 3700, 0, 4095);
+      *x_out = 4095-map(x, 250, 3800, 0, s_max_x);
+      *y_out = map(y, 150, 3700, 0, s_max_y);
   }
 }
 
@@ -218,6 +220,12 @@ void mgos_stmpe610_set_rotation(enum mgos_stmpe610_rotation_t rotation) {
 bool mgos_stmpe610_is_touching() {
   return s_last_touch.direction == TOUCH_DOWN;
 }
+
+void mgos_stmpe610_set_dimensions(uint16_t x, uint16_t y) {
+  s_max_x = x;
+  s_max_y = y;
+}
+
 
 bool mgos_stmpe610_spi_init(void) {
   uint16_t v;
