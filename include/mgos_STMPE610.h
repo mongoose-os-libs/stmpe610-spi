@@ -105,23 +105,23 @@
 #define STMPE_GPIO_DIR 0x13
 #define STMPE_GPIO_ALT_FUNCT 0x17
 
-enum mgos_STMPE610_touch_t {
+enum mgos_stmpe610_touch_t {
   TOUCH_DOWN = 0,
   TOUCH_UP = 1,
 };
 
-struct mgos_STMPE610_event_data {
-  enum mgos_STMPE610_touch_t direction;
+struct mgos_stmpe610_event_data {
+  enum mgos_stmpe610_touch_t direction;
   uint16_t x;
   uint16_t y;
   uint8_t z;
   uint8_t length; // Amount of time the TOUCH_DOWN event lasted (always set to 1 for TOUCH_UP)
 };
 
-bool mgos_STMPE610_init(void);
+bool mgos_stmpe610_init(void);
 
-typedef void (*mgos_STMPE610_event_t)(struct mgos_STMPE610_event_data *);
-void mgos_STMPE610_set_handler(mgos_STMPE610_event_t handler);
+typedef void (*mgos_stmpe610_event_t)(struct mgos_stmpe610_event_data *);
+void mgos_stmpe610_set_handler(mgos_stmpe610_event_t handler);
 
 
 #endif // __STMPE610H_

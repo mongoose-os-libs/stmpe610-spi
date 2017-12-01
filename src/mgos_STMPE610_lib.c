@@ -2,7 +2,7 @@
 #include "mgos_spi.h"
 #include "mgos_STMPE610.h"
 
-static mgos_STMPE610_event_t s_event_handler = NULL;
+static mgos_stmpe610_event_t s_event_handler = NULL;
 
 static uint8_t readRegister8(uint8_t reg) {
   struct mgos_spi *spi = mgos_spi_get_global();
@@ -11,16 +11,16 @@ static uint8_t readRegister8(uint8_t reg) {
     return 0;
   }
 
-  uint8_t tx_data[2] = {0x80 | reg, 0};
+  uint8_t tx_data = 0x80 | reg;
   uint8_t rx_data;
 
   struct mgos_spi_txn txn = {
       .cs = mgos_sys_config_get_stmpe610_cs_index(),
       .mode = 0,
-      .freq = 10000000,
+      .freq = 1000000,
   };
-  txn.hd.tx_len = 2;
-  txn.hd.tx_data = tx_data;
+  txn.hd.tx_len = 1;
+  txn.hd.tx_data = &tx_data;
   txn.hd.dummy_len = 0;
   txn.hd.rx_len = 1;
   txn.hd.rx_data = &rx_data;
@@ -43,7 +43,7 @@ static void writeRegister8(uint8_t reg, uint8_t val) {
   struct mgos_spi_txn txn = {
       .cs = mgos_sys_config_get_stmpe610_cs_index(),
       .mode = 0,
-      .freq = 10000000,
+      .freq = 1000000,
   };
   txn.hd.tx_data = tx_data;
   txn.hd.tx_len = sizeof(tx_data);
@@ -55,18 +55,18 @@ static void writeRegister8(uint8_t reg, uint8_t val) {
   }
 }
 
-static uint8_t mgos_STMPE610_bufferLength(void) {
+static uint8_t mgos_stmpe610_bufferLength(void) {
   return readRegister8(STMPE_FIFO_SIZE);
 }
 
 
-static uint8_t mgos_STMPE610_readData(uint16_t *x, uint16_t *y, uint8_t *z) {
+static uint8_t mgos_stmpe610_readData(uint16_t *x, uint16_t *y, uint8_t *z) {
   uint8_t data[4];
   uint8_t samples, cnt;
   uint32_t sum_sample_x = 0, sum_sample_y = 0;
   uint16_t sum_sample_z = 0;
 
-  samples = cnt = mgos_STMPE610_bufferLength();
+  samples = cnt = mgos_stmpe610_bufferLength();
   LOG(LL_DEBUG, ("Touch sensed with %d samples", samples));
   if (samples == 0)
     return 0;
@@ -87,7 +87,7 @@ static uint8_t mgos_STMPE610_readData(uint16_t *x, uint16_t *y, uint8_t *z) {
     sum_sample_x += sample_x;
     sum_sample_y += sample_y;
     sum_sample_z += sample_z;
-    LOG(LL_DEBUG, ("Sample at (%d,%d) pressure=%d, bufferLength=%d", sample_x, sample_y, sample_z, mgos_STMPE610_bufferLength()));
+    LOG(LL_DEBUG, ("Sample at (%d,%d) pressure=%d, bufferLength=%d", sample_x, sample_y, sample_z, mgos_stmpe610_bufferLength()));
     cnt--;
   }
   *x = sum_sample_x / samples;
@@ -100,25 +100,27 @@ static uint8_t mgos_STMPE610_readData(uint16_t *x, uint16_t *y, uint8_t *z) {
   return samples;
 }
 
-static uint16_t mgos_STMPE610_getVersion() {
+static uint16_t mgos_stmpe610_getVersion() {
   uint16_t version;
 
   version = readRegister8(0);
   version <<= 8;
   version |= readRegister8(1);
+
+  LOG(LL_INFO, ("Read Version byte: 0x%04x", version));
   return version;
 }
 
 static void STMPE610_irq(int pin, void *arg) {
-  struct mgos_STMPE610_event_data ed;
+  struct mgos_stmpe610_event_data ed;
 
-  if (mgos_STMPE610_bufferLength()==0) {
+  if (mgos_stmpe610_bufferLength()==0) {
     uint8_t i;
     LOG(LL_DEBUG, ("Touch DOWN"));
     for (i=0; i<10; i++) {
       mgos_msleep(5);
-      if (mgos_STMPE610_bufferLength()>0) {
-        mgos_STMPE610_readData(&ed.x, &ed.y, &ed.z);
+      if (mgos_stmpe610_bufferLength()>0) {
+        mgos_stmpe610_readData(&ed.x, &ed.y, &ed.z);
         ed.length=1;
         ed.direction = TOUCH_DOWN;
         LOG(LL_DEBUG, ("Touch DOWN at (%d,%d) pressure=%d, length=%d, iteration=%d", ed.x, ed.y, ed.z, ed.length, i));
@@ -131,7 +133,7 @@ static void STMPE610_irq(int pin, void *arg) {
     return;
   }
 
-  ed.length = mgos_STMPE610_readData(&ed.x, &ed.y, &ed.z);
+  ed.length = mgos_stmpe610_readData(&ed.x, &ed.y, &ed.z);
   ed.direction = TOUCH_UP;
   LOG(LL_DEBUG, ("Touch UP at (%d,%d) pressure=%d, length=%d", ed.x, ed.y, ed.z, ed.length));
   if (s_event_handler)
@@ -142,24 +144,24 @@ static void STMPE610_irq(int pin, void *arg) {
   (void) arg;
 }
 
-void mgos_STMPE610_set_handler(mgos_STMPE610_event_t handler) {
+void mgos_stmpe610_set_handler(mgos_stmpe610_event_t handler) {
   s_event_handler = handler;
 }
 
-bool mgos_STMPE610_init(void) {
+bool mgos_stmpe610_spi_init(void) {
   uint16_t v;
 
-  v = mgos_STMPE610_getVersion();
+  writeRegister8(STMPE_SYS_CTRL1, STMPE_SYS_CTRL1_RESET);
+  mgos_msleep(10);
+
+  v = mgos_stmpe610_getVersion();
   LOG(LL_INFO, ("STMPE610 init (CS%d, IRQ: %d)", mgos_sys_config_get_stmpe610_cs_index(), mgos_sys_config_get_stmpe610_irq_pin()));
   if (0x811 != v) {
-    LOG(LL_ERROR, ("STMPE610 init failed, disabling"));
+    LOG(LL_ERROR, ("STMPE610 init failed (0x%04x), disabling", v));
     return true;
   }
   LOG(LL_INFO, ("STMPE610 init ok"));
 
-  writeRegister8(STMPE_SYS_CTRL1, STMPE_SYS_CTRL1_RESET);
-  mgos_msleep(10);
-  
   for (uint8_t i=0; i<65; i++)
     readRegister8(i);
 

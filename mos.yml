@@ -2,7 +2,7 @@ author: Pim van Pelt <pim@ipng.nl>
 type: lib
 description: STMPE610 SPI based touch screen
 version: 1.0
-platforms: [ esp8266 ]
+platforms: [ esp8266, esp32 ]
 
 sources:
   - src
