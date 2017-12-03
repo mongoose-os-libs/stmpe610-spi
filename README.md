@@ -24,7 +24,11 @@ return them in the correct orientation.
 #### Details
 
 The chip uses an interrupt pin to signal the micro controller that it has
-something to say.
+something to say. The driver sets up a GPIO pin with a pullup, which the
+chip pulls to ground to initiate the interrupt. Mongoose OS will receive
+this and issue a software callback (so no hardware interrupts are used),
+and the driver will clear interrupts on the STMPE610 after the user supplied
+handler is called.
 
 Users can query the driver to see if the chip is currently registering a
 touch by calling `mgos_stmpe610_is_touching()` which will return `true` if
