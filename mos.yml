@@ -16,6 +16,7 @@ config_schema:
   - ["stmpe610.cs_index", "i", 0, {title: "spi.cs*_gpio index, 0, 1 or 2"}]
   - ["spi.cs0_gpio", 16 ]
   - ["stmpe610.irq_pin", "i", 4, {title: "IRQ pin"}]
+  - ["stmpe610.orientation", "i", 0, {title: "Set orientation of STMPE610 (+1 to flip X, +2 to flip Y, +4 to swap X and Y)"}]
 
 
 tags:

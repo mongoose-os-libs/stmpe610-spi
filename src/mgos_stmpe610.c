@@ -251,5 +251,8 @@ bool mgos_stmpe610_spi_init(void) {
   s_last_touch.z=0;
   s_last_touch.length=0;
 
+  // Set the orientation
+  s_orientation = mgos_sys_config_get_stmpe610_orientation();
+
   return true;
 }
