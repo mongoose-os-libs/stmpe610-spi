@@ -20,7 +20,7 @@ static uint8_t stmpe610_spi_read_register(uint8_t reg) {
 
   struct mgos_spi_txn txn = {
       .cs = mgos_sys_config_get_stmpe610_cs_index(),
-      .mode = 0,
+      .mode = 3,
       .freq = 1000000,
   };
   txn.hd.tx_len = 1;
@@ -46,7 +46,7 @@ static void stmpe610_spi_write_register(uint8_t reg, uint8_t val) {
 
   struct mgos_spi_txn txn = {
       .cs = mgos_sys_config_get_stmpe610_cs_index(),
-      .mode = 0,
+      .mode = 3,
       .freq = 1000000,
   };
   txn.hd.tx_data = tx_data;
@@ -231,6 +231,11 @@ void mgos_stmpe610_set_dimensions(uint16_t x, uint16_t y) {
 bool mgos_stmpe610_spi_init(void) {
   uint16_t v;
 
+  mgos_gpio_set_mode(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_MODE_INPUT);
+  mgos_gpio_set_pull(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_PULL_UP);
+  mgos_gpio_set_int_handler(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_INT_EDGE_NEG, stmpe610_irq, NULL);
+  mgos_gpio_enable_int(mgos_sys_config_get_stmpe610_irq_pin());
+
   stmpe610_spi_write_register(STMPE_SYS_CTRL1, STMPE_SYS_CTRL1_RESET);
   mgos_msleep(10);
 
@@ -258,11 +263,6 @@ bool mgos_stmpe610_spi_init(void) {
   stmpe610_spi_write_register(STMPE_TSC_I_DRIVE, STMPE_TSC_I_DRIVE_50MA);
   stmpe610_spi_write_register(STMPE_INT_STA, 0xFF); // reset all ints
   stmpe610_spi_write_register(STMPE_INT_CTRL, STMPE_INT_CTRL_POL_LOW | STMPE_INT_CTRL_EDGE | STMPE_INT_CTRL_ENABLE);
-
-  mgos_gpio_set_mode(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_MODE_INPUT);
-  mgos_gpio_set_pull(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_PULL_UP);
-  mgos_gpio_set_int_handler(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_INT_EDGE_NEG, stmpe610_irq, NULL);
-  mgos_gpio_enable_int(mgos_sys_config_get_stmpe610_irq_pin());
 
   // Initialize the last touch to TOUCH_UP
   s_last_touch.direction=TOUCH_UP;
