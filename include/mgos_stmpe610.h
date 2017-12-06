@@ -105,12 +105,13 @@
 #define STMPE_GPIO_DIR 0x13
 #define STMPE_GPIO_ALT_FUNCT 0x17
 
-enum mgos_stmpe610_rotation_t {
-  STMPE610_PORTRAIT       = 0,
-  STMPE610_LANDSCAPE      = 1,
-  STMPE610_PORTRAIT_FLIP  = 2,
-  STMPE610_LANDSCAPE_FLIP = 3,
-};
+// Use these in mgos_stmpe610_set_orientation()
+#define STMPE_ORIENTATION_X          0x00
+#define STMPE_ORIENTATION_Y          0x00
+#define STMPE_ORIENTATION_FLIP_X     0x01
+#define STMPE_ORIENTATION_FLIP_Y     0x02
+#define STMPE_ORIENTATION_SWAP_NONE  0x00
+#define STMPE_ORIENTATION_SWAP_XY    0x04
 
 enum mgos_stmpe610_touch_t {
   TOUCH_DOWN = 0,
@@ -129,11 +130,8 @@ bool mgos_stmpe610_init(void);
 
 typedef void (*mgos_stmpe610_event_t)(struct mgos_stmpe610_event_data *);
 void mgos_stmpe610_set_handler(mgos_stmpe610_event_t handler);
-void mgos_stmpe610_set_rotation(enum mgos_stmpe610_rotation_t rotation);
 void mgos_stmpe610_set_dimensions(uint16_t x, uint16_t y);
+void mgos_stmpe610_set_orientation(uint8_t flags);
 bool mgos_stmpe610_is_touching();
-
-
-
 
 #endif // __STMPE610H_
