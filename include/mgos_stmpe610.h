@@ -30,7 +30,7 @@
   MIT license, all text above must be included in any redistribution
  ****************************************************/
 
-/* Adapted for native Mongoose OS by Pim van Pelt <pim@ipng.nl */
+/* Adapted for native Mongoose OS by Pim van Pelt <pim@google.com> */
 
 #ifndef __STMPE610H_
 #define __STMPE610H_
