@@ -1,5 +1,5 @@
 # STMP610E
-Mongoose OS native SPI driver for STMP610E
+Mongoose native SPI driver for STMP610E
 
 ## Introduction
 
@@ -44,7 +44,7 @@ expires, a gratuitous `TOUCH_UP` event is sent with `length` set to 1.
 
 #### mos.yml
 
-The driver uses Mongoose OS native SPI driver. It is configured by setting
+The driver uses the Mongoose native SPI driver. It is configured by setting
 up the `MOSI`, `MISO`, `SCLK` pins and assinging one of the three
 available `CS` positions, in this example (which was taken from
 the Huzzah32 ESP32 microcontroller), we are going to use `CS0`:
