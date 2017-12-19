@@ -19,7 +19,7 @@
 #include "mgos_stmpe610.h"
 
 static mgos_stmpe610_event_t s_event_handler = NULL;
-static enum mgos_stmpe610_rotation_t s_rotation = STMPE610_PORTRAIT;
+static uint8_t s_orientation = STMPE_ORIENTATION_X | STMPE_ORIENTATION_Y | STMPE_ORIENTATION_SWAP_NONE;
 struct mgos_stmpe610_event_data s_last_touch;
 static uint16_t s_max_x = 240;
 static uint16_t s_max_y = 320;
@@ -36,7 +36,7 @@ static uint8_t stmpe610_spi_read_register(uint8_t reg) {
 
   struct mgos_spi_txn txn = {
       .cs = mgos_sys_config_get_stmpe610_cs_index(),
-      .mode = 0,
+      .mode = 3,
       .freq = 1000000,
   };
   txn.hd.tx_len = 1;
@@ -62,7 +62,7 @@ static void stmpe610_spi_write_register(uint8_t reg, uint8_t val) {
 
   struct mgos_spi_txn txn = {
       .cs = mgos_sys_config_get_stmpe610_cs_index(),
-      .mode = 0,
+      .mode = 3,
       .freq = 1000000,
   };
   txn.hd.tx_data = tx_data;
@@ -79,6 +79,12 @@ static uint8_t stmpe610_get_bufferlength(void) {
   return stmpe610_spi_read_register(STMPE_FIFO_SIZE);
 }
 
+static long map(long x, long in_min, long in_max, long out_min, long out_max)
+{
+  if (x<in_min) x=in_min;
+  if (x>in_max) x=in_max;
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
 static uint8_t stmpe610_read_data(uint16_t *x, uint16_t *y, uint8_t *z) {
   uint8_t data[4];
@@ -92,26 +98,33 @@ static uint8_t stmpe610_read_data(uint16_t *x, uint16_t *y, uint8_t *z) {
     return 0;
   
   while (cnt>0) {
-    uint16_t sample_x, sample_y;
+    uint16_t sample_coord1, sample_coord2;
     uint8_t sample_z;
     for (uint8_t i=0; i<4; i++) {
       data[i] = stmpe610_spi_read_register(0xD7);
     }
-    sample_x = data[0];
-    sample_x <<= 4;
-    sample_x |= (data[1] >> 4);
-    sample_y = data[1] & 0x0F; 
-    sample_y <<= 8;
-    sample_y |= data[2]; 
+    sample_coord1 = data[0];
+    sample_coord1 <<= 4;
+    sample_coord1 |= (data[1] >> 4);
+    if (s_orientation&STMPE_ORIENTATION_FLIP_X) sample_coord1=4096-sample_coord1;
+    sample_coord2 = data[1] & 0x0F; 
+    sample_coord2 <<= 8;
+    sample_coord2 |= data[2]; 
+    if (s_orientation&STMPE_ORIENTATION_FLIP_Y) sample_coord2=4096-sample_coord2;
+    if (s_orientation&STMPE_ORIENTATION_SWAP_XY) {
+      uint32_t sample_swap=sample_coord1;
+      sample_coord1=sample_coord2;
+      sample_coord2=sample_swap;
+    }
     sample_z = data[3];
-    sum_sample_x += sample_x;
-    sum_sample_y += sample_y;
+    sum_sample_x += sample_coord1;
+    sum_sample_y += sample_coord2;
     sum_sample_z += sample_z;
-    LOG(LL_DEBUG, ("Sample at (%d,%d) pressure=%d, bufferLength=%d", sample_x, sample_y, sample_z, stmpe610_get_bufferlength()));
+    LOG(LL_DEBUG, ("Sample at (%d,%d) pressure=%d, bufferLength=%d", sample_coord1, sample_coord2, sample_z, stmpe610_get_bufferlength()));
     cnt--;
   }
-  *x = sum_sample_x / samples;
-  *y = sum_sample_y / samples;
+  *x = map(sum_sample_x / samples, 150, 3800, 0, s_max_x);
+  *y = map(sum_sample_y / samples, 150, 3800, 0, s_max_y);
   *z = sum_sample_z / samples;
 
   stmpe610_spi_write_register(STMPE_FIFO_STA, STMPE_FIFO_STA_RESET); // clear FIFO
@@ -129,33 +142,6 @@ static uint16_t smpe610_get_version() {
 
   LOG(LL_INFO, ("Read Version byte: 0x%04x", version));
   return version;
-}
-
-static long map(long x, long in_min, long in_max, long out_min, long out_max)
-{
-  if (x<in_min) x=in_min;
-  if (x>in_max) x=in_max;
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
-
-static void stmpe610_map_rotation(uint16_t x, uint16_t y, uint16_t *x_out, uint16_t *y_out) {
-  switch(s_rotation) {
-    case STMPE610_LANDSCAPE:
-      *x_out = map(y, 150, 3800, 0, s_max_x);
-      *y_out = map(x, 250, 3700, 0, s_max_y);
-      break;
-    case STMPE610_PORTRAIT_FLIP:
-      *x_out = map(x, 250, 3800, 0, s_max_x);
-      *y_out = 4095-map(y, 150, 3700, 0, s_max_y);
-      break;
-    case STMPE610_LANDSCAPE_FLIP:
-      *x_out = 4095-map(y, 150, 3800, 0, s_max_x);
-      *y_out = 4095-map(x, 250, 3700, 0, s_max_y);
-      break;
-    default: // STMPE610_PORTRAIT
-      *x_out = 4095-map(x, 250, 3800, 0, s_max_x);
-      *y_out = map(y, 150, 3700, 0, s_max_y);
-  }
 }
 
 /* Each time a TOUCH_DOWN event occurs, s_last_touch is populated
@@ -182,8 +168,6 @@ static void stmpe610_down_cb(void *arg) {
 
 static void stmpe610_irq(int pin, void *arg) {
   struct mgos_stmpe610_event_data ed;
-  uint16_t x, y;
-  uint8_t z;
 
   if (stmpe610_get_bufferlength()==0) {
     uint8_t i;
@@ -192,13 +176,11 @@ static void stmpe610_irq(int pin, void *arg) {
       mgos_msleep(5);
       if (stmpe610_get_bufferlength()>0) {
 
-        stmpe610_read_data(&x, &y, &z);
-        LOG(LL_DEBUG, ("Touch DOWN at (%d,%d) pressure=%d, length=%d, iteration=%d", x, y, z, ed.length, i));
+        stmpe610_read_data(&ed.x, &ed.y, &ed.z);
+        LOG(LL_DEBUG, ("Touch DOWN at (%d,%d) pressure=%d, length=%d, iteration=%d", ed.x, ed.y, ed.z, ed.length, i));
 
         ed.length=1;
         ed.direction = TOUCH_DOWN;
-        stmpe610_map_rotation(x, y, &ed.x, &ed.y);
-        ed.z = z;
         // To avoid DOWN events without an UP event, set a timer (see stmpe610_down_cb for details)
         memcpy((void *)&s_last_touch, (void *)&ed, sizeof(s_last_touch));
         mgos_set_timer(100, 0, stmpe610_down_cb, NULL);
@@ -211,11 +193,9 @@ static void stmpe610_irq(int pin, void *arg) {
     return;
   }
 
-  ed.length = stmpe610_read_data(&x, &y, &z);
-  LOG(LL_DEBUG, ("Touch UP at (%d,%d) pressure=%d, length=%d", x, y, z, ed.length));
+  ed.length = stmpe610_read_data(&ed.x, &ed.y, &ed.z);
+  LOG(LL_DEBUG, ("Touch UP at (%d,%d) pressure=%d, length=%d", ed.x, ed.y, ed.z, ed.length));
   ed.direction = TOUCH_UP;
-  stmpe610_map_rotation(x, y, &ed.x, &ed.y);
-  ed.z = z;
   memcpy((void *)&s_last_touch, (void *)&ed, sizeof(s_last_touch));
   if (s_event_handler)
     s_event_handler(&ed);
@@ -230,8 +210,8 @@ void mgos_stmpe610_set_handler(mgos_stmpe610_event_t handler) {
   s_event_handler = handler;
 }
 
-void mgos_stmpe610_set_rotation(enum mgos_stmpe610_rotation_t rotation) {
-  s_rotation = rotation;
+void mgos_stmpe610_set_orientation(uint8_t flags) {
+  s_orientation = flags;
 }
 
 bool mgos_stmpe610_is_touching() {
@@ -246,6 +226,11 @@ void mgos_stmpe610_set_dimensions(uint16_t x, uint16_t y) {
 
 bool mgos_stmpe610_spi_init(void) {
   uint16_t v;
+
+  mgos_gpio_set_mode(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_MODE_INPUT);
+  mgos_gpio_set_pull(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_PULL_UP);
+  mgos_gpio_set_int_handler(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_INT_EDGE_NEG, stmpe610_irq, NULL);
+  mgos_gpio_enable_int(mgos_sys_config_get_stmpe610_irq_pin());
 
   stmpe610_spi_write_register(STMPE_SYS_CTRL1, STMPE_SYS_CTRL1_RESET);
   mgos_msleep(10);
@@ -275,17 +260,15 @@ bool mgos_stmpe610_spi_init(void) {
   stmpe610_spi_write_register(STMPE_INT_STA, 0xFF); // reset all ints
   stmpe610_spi_write_register(STMPE_INT_CTRL, STMPE_INT_CTRL_POL_LOW | STMPE_INT_CTRL_EDGE | STMPE_INT_CTRL_ENABLE);
 
-  mgos_gpio_set_mode(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_MODE_INPUT);
-  mgos_gpio_set_pull(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_PULL_UP);
-  mgos_gpio_set_int_handler(mgos_sys_config_get_stmpe610_irq_pin(), MGOS_GPIO_INT_EDGE_NEG, stmpe610_irq, NULL);
-  mgos_gpio_enable_int(mgos_sys_config_get_stmpe610_irq_pin());
-
   // Initialize the last touch to TOUCH_UP
   s_last_touch.direction=TOUCH_UP;
   s_last_touch.x=0;
   s_last_touch.y=0;
   s_last_touch.z=0;
   s_last_touch.length=0;
+
+  // Set the orientation
+  s_orientation = mgos_sys_config_get_stmpe610_orientation();
 
   return true;
 }
