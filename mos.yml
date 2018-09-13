@@ -22,5 +22,6 @@ config_schema:
 tags:
   - c
   - hw
+  - docs:drivers:STMPE610 SPI
 
 manifest_version: 2017-09-29
