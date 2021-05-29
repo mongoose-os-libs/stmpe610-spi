@@ -9,7 +9,7 @@ sources:
 includes:
   - include
 libs:
-  - origin: https://github.com/mongoose-os-libs/spi
+  - location: https://github.com/mongoose-os-libs/spi
 
 config_schema:
   - ["stmpe610", "o", {title: "STMPE610 TouchScreen"}]
